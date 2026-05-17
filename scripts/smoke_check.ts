@@ -1,7 +1,5 @@
 import app from "../src/app";
 
-const port = 5228;
-const base = `http://127.0.0.1:${port}`;
 const routes = [
   "/",
   "/contract-matrix",
@@ -17,9 +15,23 @@ const routes = [
 ];
 
 async function main() {
-  const server = app.listen(port, "127.0.0.1");
+  const server = app.listen(0, "127.0.0.1");
 
   try {
+    const address = await new Promise<import("node:net").AddressInfo>((resolve, reject) => {
+      server.once("listening", () => {
+        const activeAddress = server.address();
+        if (!activeAddress || typeof activeAddress === "string") {
+          reject(new Error("Could not resolve listening address"));
+          return;
+        }
+        resolve(activeAddress);
+      });
+      server.once("error", reject);
+    });
+
+    const base = `http://127.0.0.1:${address.port}`;
+
     for (const route of routes) {
       const response = await fetch(`${base}${route}`);
       if (!response.ok) {
@@ -28,9 +40,11 @@ async function main() {
     }
     console.log("smoke check passed");
   } finally {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
+    if (server.listening) {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
   }
 }
 
